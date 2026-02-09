@@ -1,0 +1,64 @@
+{
+  "expo": {
+    "name": "Jag GeoTag",
+    "slug": "jag-geotag",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1a1a2e"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.jag.geotag",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Jag GeoTag needs camera access to take photos with location.",
+        "NSLocationWhenInUseUsageDescription": "Jag GeoTag uses your location to tag photos with exact coordinates.",
+        "NSPhotoLibraryAddUsageDescription": "Jag GeoTag saves geo-tagged photos to your library."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1a1a2e"
+      },
+      "package": "com.jag.geotag",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_EXTERNAL_STORAGE"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Jag GeoTag to access your camera to take geo-tagged photos.",
+          "microphonePermission": "Allow Jag GeoTag to access your microphone for video (optional).",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Jag GeoTag uses your location to tag photos with date, time, and exact coordinates (latitude, longitude, accuracy)."
+        }
+      ],
+      "expo-asset"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "6d458f18-29a1-48e0-ade1-70478b19153d"
+      }
+    },
+    "owner": "cletix"
+  }
+}
