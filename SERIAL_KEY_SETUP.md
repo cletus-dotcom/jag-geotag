@@ -79,13 +79,17 @@ Generating 5 serial key(s)...
 
 ### First Installation
 
-1. User installs the app on their device
-2. App launches and detects no serial key
-3. Serial Key input screen appears
-4. User contacts administrator to obtain a serial key
-5. User enters the serial key: `JAG-A1B2-C3D4-E5F6-G7H8`
-6. App validates and registers the key
-7. App becomes fully functional
+1. User installs the app on their device.
+2. App launches and shows **Serial Number Required**: a short notice to get the serial number and a **Get Serial Number** button that opens the subscription gateway URL (payment portal).
+3. User taps **Get Serial Number** → app opens the gateway (same URL as subscription renewal; first-install param `first_install=1` and amount 800 PHP).
+4. User pays at the gateway and receives a serial key and/or QR code.
+5. User returns to the app and either:
+   - Taps **Enter key / Scan or upload QR** to open the activation screen, then:
+     - **Enter** the serial key and tap **Activate with serial key**, or
+     - **Scan QR Code** (camera) to scan the QR received after payment, or
+     - **Upload QR Code** (pick image from gallery) if the gateway sent a QR image.
+6. App validates the serial key or QR (serial-key format or subscription QR format) and activates.
+7. App becomes fully functional.
 
 ### Installing on Another Device
 

@@ -1,29 +1,67 @@
-# Subscription System Setup - QR Code Based Approval
+# Subscription System Setup - Gateway & QR Code
 
-The app includes a subscription/licensing system that requires QR code-based approval every 30 days. This document explains how to configure and use the complete system.
+The app includes a subscription/licensing system that requires renewal every 30 days. When expired, the app shows renewal instructions and a **Subscription Renewal** button that opens your gateway portal (e.g. payment app or web page). After payment in the gateway, users can scan a QR code to reactivate the app.
 
 ## Overview
 
-The subscription system works on a **30-day approval cycle** with **QR code-based activation**. When a subscription expires, users request approval via email, and admins send back a unique QR code that users scan to reactivate the app.
+- **30-day cycle**: Subscription must be renewed every 30 days.
+- **Expired startup**: When the app starts and subscription is expired, it does not function; it shows:
+  1. **Instructions**: (1) Click the Subscription Renewal button below. (2) Follow the instructions in the renewal gateway.
+  2. **Subscription Renewal button**: Opens the gateway portal (URL or app link you configure).
+- **Gateway**: You build a separate gateway app/portal for payment; link it in config (see below).
+- **QR code**: After completing renewal in the gateway, user can return to the app and tap **Scan QR Code** to activate.
 
 ## Key Features
 
-- **30-day approval cycle**: Subscription must be approved every 30 days
-- **QR code activation**: Secure QR code scanning for subscription approval
-- **Days tracking**: Email notifications include days passed since last subscription for payment calculation
-- **App blocking**: Camera functionality is completely disabled if subscription is not approved
-- **Automatic resumption**: After successful QR code validation, the app automatically resumes full functionality
-- **Email notifications**: Automatically sends email when subscription expires or is about to expire (7 days before)
+- **30-day approval cycle**: Subscription must be renewed every 30 days
+- **Renewal gateway**: Subscription Renewal button opens your gateway portal (configurable URL)
+- **App blocking**: App does not function when subscription is expired; startup shows instructions and renewal button
+- **QR code activation**: After payment in gateway, user scans QR code in the app to activate
+- **Automatic resumption**: After successful QR code validation, the app resumes full functionality
 
 ## Setup Instructions
 
-### 1. Configure Your Email Address
+### 1. Configure Renewal Gateway URL
 
-Edit `src/services/subscriptionService.js` and replace the `ADMIN_EMAIL` constant with your email address:
+Set the base URL that the **Subscription Renewal** button opens (your gateway portal or app deep link):
+
+**File:** `src/config/subscriptionGateway.js`
 
 ```javascript
-const ADMIN_EMAIL = 'your-actual-email@example.com';
+export const SUBSCRIPTION_RENEWAL_GATEWAY_URL = 'https://your-gateway.com/renewal';
 ```
+
+- Use an **https** URL for a web gateway, or a **custom URL scheme** (e.g. `myapp://renewal`) if your gateway is a separate app.
+- When the user taps **Subscription Renewal**, the app **calculates the due amount** and **sends data via URL query parameters** (see below). Your gateway should read these params to show the amount and process payment.
+
+#### Due amount calculation
+
+- **Formula:** 800 pesos per month + days elapsed amount `(800/30 × days passed after expiration)`.
+- **Example:** Expired 5 days ago → due = 800 + (800/30 × 5) = 800 + 133.33 = **933.33 PHP**.
+
+Pricing constants (editable in `src/config/subscriptionGateway.js`):
+
+- `PRICE_PER_MONTH_PESOS` = 800  
+- `SUBSCRIPTION_PERIOD_DAYS` = 30  
+
+#### Data sent to the gateway (query parameters)
+
+When opening the renewal URL, the app appends:
+
+| Parameter       | Example    | Description                          |
+|----------------|------------|--------------------------------------|
+| `amount`       | 933.33     | Total due amount (PHP)               |
+| `currency`     | PHP        | Currency code                        |
+| `days_passed`  | 5          | Days since subscription expired      |
+| `expiry_date`  | ISO date   | Subscription expiry date             |
+| `base_amount`  | 800        | Base 800 PHP for the month           |
+| `elapsed_amount` | 133.33   | (800/30) × days_passed               |
+
+**Example full URL:**
+
+`https://your-gateway.com/renewal?amount=933.33&currency=PHP&days_passed=5&expiry_date=2026-02-01T00%3A00%3A00.000Z&base_amount=800&elapsed_amount=133.33`
+
+Your gateway portal should read these query parameters and display/charge the `amount` (in `currency`).
 
 ### 2. Configure Secret Key (Optional but Recommended)
 
@@ -49,12 +87,6 @@ Install required packages:
 npm install
 ```
 
-Or install individually:
-
-```bash
-npx expo install expo-mail-composer expo-crypto
-```
-
 For QR code image generation (optional):
 ```bash
 npm install qrcode
@@ -70,37 +102,28 @@ npm install qrcode
 ### Subscription Expiry Process
 
 1. **30-Day Check**: Every time the app opens, it checks if 30 days have passed since last approval
-2. **Email Notification**: 
-   - Sent automatically when subscription expires
-   - Sent 7 days before expiration as a reminder
-   - **Includes days passed** since last subscription for payment calculation
-3. **App Blocking**: 
-   - Camera preview is disabled
-   - Photo capture is disabled
-   - User sees subscription expired screen with QR scanner button
+2. **App Blocking**: When expired, the app does not function. On startup it shows:
+   - A notification with **Subscription renewal instructions**: (1) Click the Subscription Renewal button below. (2) Follow the instructions in the renewal gateway.
+   - **Subscription Renewal** button: Opens the gateway portal (payment/renewal flow)
+   - **Scan QR Code** button: For use after completing renewal in the gateway
+   - **Check Status** button: Re-checks subscription (e.g. after scanning QR)
+3. **User Action**: User taps **Subscription Renewal** → follows instructions in gateway → after payment, returns to app and taps **Scan QR Code** to activate (or gateway may deep-link back with activation)
 
 ### Approval Workflow
 
-#### Step 1: User Requests Approval
+#### Step 1: User Opens Renewal Gateway
 
-When subscription expires or is about to expire:
-- App automatically sends email to admin (`ADMIN_EMAIL`)
-- Email includes:
-  - Subscription status (expired or expiring soon)
-  - **Days passed since last subscription** (for payment calculation)
-  - Device/platform information
-  - Request for QR code approval
+When subscription is expired:
+- User sees instructions and taps **Subscription Renewal**
+- App opens the gateway URL (your separate gateway app or web portal)
+- User follows instructions in the gateway (e.g. payment, login)
 
-**Email Example:**
-```
-Days Passed Since Last Subscription: 35 days
-Subscription period: 30 days
-Additional days: 5 days
-```
+#### Step 2: Admin / Gateway Provides QR Code
 
-#### Step 2: Admin Generates QR Code
-
-Admin receives email and generates a unique QR code:
+After payment in the gateway, the user needs a QR code to activate the app:
+- If your gateway app generates QR codes, show the QR to the user
+- Or use the admin scripts to generate a QR code and deliver it via your gateway
+- Admin script (if needed):
 
 **Option A: Text Output (Simple)**
 ```bash
@@ -119,18 +142,18 @@ npm install qrcode
 node scripts/generateQRCodeWithImage.js
 ```
 
-This creates a PNG file in `qr_codes/` folder ready to email.
+This creates a PNG file in `qr_codes/` folder.
 
 **Option C: Custom Date**
 ```bash
 node scripts/generateQRCode.js 2026-02-12
 ```
 
-#### Step 3: Admin Sends QR Code
+#### Step 3: User Receives QR Code
 
-Admin sends the QR code image to the user via email with payment instructions (if applicable).
+Gateway or admin sends or shows the QR code to the user (e.g. in gateway app, in person, or other channel).
 
-#### Step 4: User Scans QR Code
+#### Step 4: User Scans QR Code in App
 
 1. User opens the app
 2. Sees subscription expired screen
@@ -152,54 +175,6 @@ Admin sends the QR code image to the user via email with payment instructions (i
 - ❌ Error message shown: "Invalid QR code" or "QR code already used"
 - ❌ User can try scanning again or contact admin
 - ❌ App remains blocked until valid QR code is scanned
-
-## Email Notification Details
-
-### What's Included in the Email
-
-The automatic email notification includes:
-
-1. **Subscription Status**
-   - Current status (expired or expiring soon)
-   - Days remaining (if not expired)
-
-2. **Payment Calculation Information**
-   - **Days passed since last subscription**: Critical for calculating renewal fees
-   - Base subscription period: 30 days
-   - Additional days (if subscription expired): Days beyond 30
-   - Total days to renew
-
-3. **Device Information**
-   - Platform (Android/iOS)
-   - Request date/time
-   - Expiry date (if applicable)
-
-4. **Approval Instructions**
-   - Steps to generate QR code
-   - How to send QR code to user
-
-### Email Example
-
-```
-Jag GeoTag App Subscription Approval Request
-
-⚠️ SUBSCRIPTION HAS EXPIRED ⚠️
-
-App: Jag GeoTag
-Status: EXPIRED
-Current Date: Feb 12, 2026, 21:05:32
-Last Approved: Jan 10, 2026
-Days Passed Since Last Subscription: 33 days
-
-═══════════════════════════════════════════════════════
-PAYMENT CALCULATION
-═══════════════════════════════════════════════════════
-
-Days since last subscription: 33 days
-Subscription period: 30 days
-Additional days: 3 days
-Total days to renew: 33 days
-```
 
 ## QR Code System
 
@@ -244,7 +219,6 @@ Subscription data is stored locally in:
   "isApproved": true,
   "lastApprovedDate": "2026-02-12T21:05:32.000Z",
   "nextCheckDate": "2026-03-14T21:05:32.000Z",
-  "notificationSent": false,
   "approvedViaQR": true,
   "qrCodeUsed": "JAG-1736726400000-A1B2C3D4"
 }
@@ -254,7 +228,6 @@ Subscription data is stored locally in:
 - `isApproved`: Boolean indicating if subscription is approved
 - `lastApprovedDate`: ISO date string of last approval
 - `nextCheckDate`: ISO date string when subscription expires (30 days from approval)
-- `notificationSent`: Boolean indicating if notification email was sent
 - `approvedViaQR`: Boolean indicating if approved via QR code
 - `qrCodeUsed`: The QR code that was used for approval
 
@@ -267,7 +240,7 @@ Stores list of used QR codes to prevent reuse (keeps last 100 codes).
 
 ## Payment Calculation Guide
 
-The email notification includes days passed since last subscription to help calculate renewal fees:
+Admins can calculate renewal fees based on days since last subscription (e.g. from user contact or records):
 
 ### Example Scenarios
 
@@ -299,11 +272,11 @@ Total: $X + $Y
 
 ### Payment Processing
 
-1. **Receive Email**: Check "Days Passed Since Last Subscription"
-2. **Calculate Fee**: Based on your pricing structure
+1. **User contacts admin**: User requests renewal when subscription expires
+2. **Calculate Fee**: Based on your pricing structure and days since last subscription
 3. **Process Payment**: Collect payment from user
 4. **Generate QR Code**: After payment confirmation
-5. **Send QR Code**: Email QR code image to user
+5. **Send QR Code**: Provide QR code to user (in person, messaging, etc.)
 
 ## Testing the System
 
@@ -317,8 +290,6 @@ Total: $X + $Y
    ```
 
 2. **Open App**: App should show subscription expired screen
-
-3. **Check Email**: Email should be sent automatically
 
 ### Test QR Code Scanning
 
@@ -395,19 +366,9 @@ After successful QR scan:
 - Verify subscription.json was updated
 - Try restarting the app
 
-### Email Not Sending
-
-**Possible Causes:**
-- No email account configured on device
-- Mail composer not available
-
-**Solutions:**
-- Configure email account in device settings
-- Check if MailComposer.isAvailableAsync() returns true
-- Use alternative notification method if needed
-
 ## Files Created
 
+- `src/config/subscriptionGateway.js` - Renewal gateway URL (link for Subscription Renewal button)
 - `src/services/subscriptionService.js` - Subscription management service
 - `src/utils/qrCodeGenerator.js` - QR code generation and validation
 - `src/screens/QRScannerScreen.js` - QR code scanner screen component
@@ -417,17 +378,16 @@ After successful QR scan:
 
 ## Files Modified
 
-- `src/screens/CameraScreen.js` - Integrated subscription checks, QR scanner, and app blocking
-- `package.json` - Added `expo-mail-composer` and `expo-crypto` dependencies
+- `src/screens/CameraScreen.js` - Subscription expired screen: instructions, Subscription Renewal button (opens gateway), QR scanner, Check Status
+- `package.json` - Added `expo-crypto` dependency (for QR code validation)
 
 ## Important Notes
 
-- **Email Composer**: Requires a configured email account on the device
 - **Subscription Check**: Happens on app launch and every minute while app is active
 - **First-Time Users**: Get 30 days free (initialized as approved)
 - **Graceful Degradation**: System allows app to function if subscription check fails (for development)
 - **QR Code Security**: Change secret keys for production use
-- **Payment Integration**: Email includes days passed, but payment processing is manual (can be automated with backend)
+- **Payment**: Payment and renewal flow is manual (user contacts admin; admin generates QR after payment)
 
 ## Production Recommendations
 
@@ -435,7 +395,7 @@ After successful QR scan:
    - Automatically generate QR codes
    - Track subscription status
    - Process payments
-   - Send QR codes via automated email
+   - Deliver QR codes to users (e.g. in-app, messaging, or other channel)
 
 2. **Enhanced Security**:
    - Use stronger secret keys
@@ -445,7 +405,7 @@ After successful QR scan:
 
 3. **Automation**:
    - Automated payment processing
-   - Automated QR code generation and email sending
+   - Automated QR code generation
    - Admin dashboard for subscription management
 
 4. **Payment Integration**:

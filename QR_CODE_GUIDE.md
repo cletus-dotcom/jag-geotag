@@ -2,13 +2,13 @@
 
 ## Overview
 
-The app uses QR code-based approval for subscription activation. When a subscription expires, users request approval via email, and admins send back a unique QR code that users scan to activate their subscription.
+The app uses QR code-based approval for subscription activation. When a subscription expires, users contact the administrator for a QR code; admins generate and provide a unique QR code that users scan to activate their subscription.
 
 ## Workflow
 
-1. **User**: Subscription expires → App sends email to admin
-2. **Admin**: Receives email → Generates QR code → Sends QR code image via email
-3. **User**: Receives QR code → Opens app → Taps "📷 Scan QR Code" → Scans code → Subscription activated
+1. **User**: Subscription expires → User contacts admin for renewal
+2. **Admin**: Generates QR code → Sends or shows QR code to user (in person, messaging, etc.)
+3. **User**: Opens app → Taps "📷 Scan QR Code" → Scans code → Subscription activated
 
 ## Generating QR Codes
 
@@ -36,7 +36,7 @@ Then generate:
 node scripts/generateQRCodeWithImage.js
 ```
 
-This creates a PNG file in `qr_codes/` folder that you can attach to your email.
+This creates a PNG file in `qr_codes/` folder that you can send or show to the user.
 
 ### Custom Date
 

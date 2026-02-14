@@ -32,7 +32,7 @@ function generateQRCodeImage(code) {
   console.log('1. Install qrcode: npm install qrcode');
   console.log('2. Use online QR generator: https://www.qr-code-generator.com/');
   console.log('3. Copy the code above and paste it into the generator');
-  console.log('4. Send the QR code image to the user via email\n');
+  console.log('4. Send or show the QR code image to the user\n');
 }
 
 // Get subscription date from command line or use current date

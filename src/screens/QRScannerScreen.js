@@ -14,7 +14,7 @@ import {
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { approveSubscriptionWithQRCode } from '../services/subscriptionService';
 
-export default function QRScannerScreen({ onScanSuccess, onCancel }) {
+export default function QRScannerScreen({ onScanSuccess, onCancel, onScannedCode }) {
   const [permission, requestPermission] = useCameraPermissions();
   const [scanning, setScanning] = useState(true);
   const [processing, setProcessing] = useState(false);
@@ -32,6 +32,27 @@ export default function QRScannerScreen({ onScanSuccess, onCancel }) {
     setProcessing(true);
 
     try {
+      // If parent provides custom handler (e.g. for serial key + subscription), use it
+      if (onScannedCode) {
+        const result = await onScannedCode(data);
+        if (result && result.success) {
+          Alert.alert('Success', result.message || 'Activation successful.', [
+            { text: 'OK', onPress: () => onScanSuccess && onScanSuccess() },
+          ]);
+        } else {
+          Alert.alert(
+            'Invalid QR Code',
+            (result && result.error) || 'The scanned QR code is not valid. Please try again.',
+            [
+              { text: 'Try Again', onPress: () => setScanning(true) },
+              { text: 'Cancel', style: 'cancel', onPress: () => onCancel && onCancel() },
+            ]
+          );
+        }
+        setProcessing(false);
+        return;
+      }
+
       const result = await approveSubscriptionWithQRCode(data);
       
       if (result.success) {

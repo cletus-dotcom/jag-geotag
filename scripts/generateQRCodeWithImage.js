@@ -48,7 +48,7 @@ async function generateQRCodeImage(code) {
     console.log(`\nDate: ${new Date().toLocaleString()}`);
     console.log(`\nValid for subscription period starting: ${new Date(parseInt(code.split('-')[1])).toLocaleDateString()}`);
     console.log('\n═══════════════════════════════════════════════════════');
-    console.log('\nSend this QR code image to the user via email.\n');
+    console.log('\nSend or show this QR code image to the user.\n');
 
     return filepath;
   } catch (error) {

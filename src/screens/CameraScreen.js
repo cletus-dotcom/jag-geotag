@@ -11,6 +11,7 @@ import {
   Platform,
   Modal,
   Pressable,
+  Linking,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Location from 'expo-location';
@@ -23,6 +24,7 @@ import { Asset } from 'expo-asset';
 import { saveGeoPhoto } from '../storage/geoStorage';
 import { createKmzFromPhoto } from '../utils/createKmz';
 import { TARGET_ACCURACY_METERS, ACCURACY_WAIT_TIMEOUT_MS } from '../config/locationAccuracy';
+import { buildRenewalGatewayUrl, buildFirstInstallGatewayUrl } from '../config/subscriptionGateway';
 import { checkSubscriptionStatus, isSubscriptionApproved, getSubscriptionInfo, approveSubscription, approveSubscriptionWithQRCode } from '../services/subscriptionService';
 import { isSerialKeyValid, getSerialKeyInfo } from '../services/serialKeyService';
 import QRScannerScreen from './QRScannerScreen';
@@ -156,7 +158,7 @@ export default function CameraScreen() {
         if (!status.approved) {
           Alert.alert(
             'Subscription Required',
-            `Your subscription has ${info.daysRemaining > 0 ? `expired` : 'expired'}. An email has been sent for approval. Please wait for approval or manually approve if you have received confirmation.`,
+            `Your subscription has ${info.daysRemaining > 0 ? `expired` : 'expired'}. Contact your administrator for a QR code to activate, or use Manual Approval if you have been approved.`,
             [
               { text: 'Check Status', onPress: () => checkSubscription() },
               { text: 'OK' }
@@ -213,6 +215,35 @@ export default function CameraScreen() {
     }
   }, []);
 
+  const openRenewalGateway = useCallback(async () => {
+    try {
+      const info = subscriptionInfo ?? (await getSubscriptionInfo());
+      const url = buildRenewalGatewayUrl(info);
+      const canOpen = await Linking.canOpenURL(url);
+      if (canOpen) {
+        await Linking.openURL(url);
+      } else {
+        Alert.alert('Cannot Open', 'The renewal gateway could not be opened. Please try again later.');
+      }
+    } catch (e) {
+      Alert.alert('Error', e?.message || 'Could not open renewal gateway.');
+    }
+  }, [subscriptionInfo]);
+
+  const openGetSerialNumberGateway = useCallback(async () => {
+    try {
+      const url = buildFirstInstallGatewayUrl();
+      const canOpen = await Linking.canOpenURL(url);
+      if (canOpen) {
+        await Linking.openURL(url);
+      } else {
+        Alert.alert('Cannot Open', 'The gateway could not be opened. Please try again later.');
+      }
+    } catch (e) {
+      Alert.alert('Error', e?.message || 'Could not open gateway.');
+    }
+  }, []);
+
   const requestAllPermissions = useCallback(async () => {
     // Check serial key first (required for app to function)
     if (!serialKeyValid) {
@@ -230,7 +261,7 @@ export default function CameraScreen() {
     if (!approved) {
       Alert.alert(
         'Subscription Required',
-        'Your subscription is not approved. Please wait for email approval or manually approve if you have received confirmation.',
+        'Your subscription is not approved. Contact your administrator for a QR code, or use Manual Approval if you have been approved.',
         [
           { text: 'Manual Approval', onPress: handleManualApproval },
           { text: 'OK' }
@@ -304,7 +335,7 @@ export default function CameraScreen() {
     if (!approved) {
       Alert.alert(
         'Subscription Required',
-        'Your subscription is not approved. Please wait for email approval or manually approve if you have received confirmation.',
+        'Your subscription is not approved. Contact your administrator for a QR code, or use Manual Approval if you have been approved.',
         [
           { text: 'Manual Approval', onPress: handleManualApproval },
           { text: 'OK' }
@@ -553,19 +584,25 @@ export default function CameraScreen() {
       <>
         <View style={styles.centered}>
           <Text style={styles.message}>
-            🔐 Serial Key Required 🔐
+            🔐 Serial Number Required 🔐
           </Text>
-          <Text style={[styles.message, { fontSize: 14, marginTop: 8, marginBottom: 16 }]}>
-            Please enter a valid serial key to activate the app on this device.
-          </Text>
-          <Text style={[styles.message, { fontSize: 12, color: '#94a3b8', marginBottom: 16 }]}>
-            Each device requires a unique serial key. Contact the administrator to obtain one.
-          </Text>
+          <View style={styles.instructionBox}>
+            <Text style={styles.instructionTitle}>Get your serial number</Text>
+            <Text style={styles.instructionStep}>
+              Go to the subscription gateway to pay. After successful payment, return here and scan or upload your QR code to activate the app.
+            </Text>
+          </View>
           <TouchableOpacity 
             style={[styles.primaryButton, { backgroundColor: '#4ade80' }]} 
+            onPress={openGetSerialNumberGateway}
+          >
+            <Text style={styles.primaryButtonText}>Get Serial Number</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.primaryButton, { marginTop: 12, backgroundColor: '#38bdf8' }]} 
             onPress={() => setShowSerialKeyScreen(true)}
           >
-            <Text style={styles.primaryButtonText}>Enter Serial Key</Text>
+            <Text style={styles.primaryButtonText}>Enter key / Scan or upload QR</Text>
           </TouchableOpacity>
         </View>
         {showSerialKeyScreen && (
@@ -577,6 +614,7 @@ export default function CameraScreen() {
             <SerialKeyScreen
               onSuccess={handleSerialKeySuccess}
               onCancel={() => setShowSerialKeyScreen(false)}
+              openGetSerialNumberGateway={openGetSerialNumberGateway}
             />
           </Modal>
         )}
@@ -599,27 +637,30 @@ export default function CameraScreen() {
     return (
       <>
         <View style={styles.centered}>
-          <Text style={styles.message}>
+          <Text style={styles.subscriptionTitle}>
             {daysRemaining <= 0 
               ? '⚠️ Subscription Expired ⚠️' 
               : `⚠️ Subscription Expiring Soon (${daysRemaining} days remaining)`}
           </Text>
-          <Text style={[styles.message, { fontSize: 14, marginTop: 8, marginBottom: 16 }]}>
-            An email has been sent for approval. Please scan the QR code sent via email to activate your subscription.
-          </Text>
-          {subscriptionInfo?.nextCheckDate && (
-            <Text style={[styles.message, { fontSize: 12, color: '#94a3b8', marginBottom: 16 }]}>
-              Next check: {new Date(subscriptionInfo.nextCheckDate).toLocaleDateString()}
-            </Text>
-          )}
+          <View style={styles.instructionBox}>
+            <Text style={styles.instructionTitle}>Subscription renewal instructions</Text>
+            <Text style={styles.instructionStep}>1. Click the Subscription Renewal button below.</Text>
+            <Text style={styles.instructionStep}>2. Follow the instructions in the renewal gateway.</Text>
+          </View>
           <TouchableOpacity 
-            style={[styles.primaryButton, { backgroundColor: '#4ade80' }]} 
+            style={[styles.primaryButton, styles.renewalButton]} 
+            onPress={openRenewalGateway}
+          >
+            <Text style={styles.primaryButtonText}>Subscription Renewal</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.primaryButton, { marginTop: 12, backgroundColor: '#64748b' }]} 
             onPress={() => setShowQRScanner(true)}
           >
             <Text style={styles.primaryButtonText}>📷 Scan QR Code</Text>
           </TouchableOpacity>
           <TouchableOpacity 
-            style={[styles.primaryButton, { marginTop: 12, backgroundColor: '#64748b' }]} 
+            style={[styles.primaryButton, { marginTop: 8, backgroundColor: '#475569' }]} 
             onPress={async () => {
               const status = await checkSubscriptionStatus();
               const info = await getSubscriptionInfo();
@@ -741,6 +782,38 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
     marginBottom: 24,
+  },
+  subscriptionTitle: {
+    color: '#e2e8f0',
+    fontSize: 18,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  instructionBox: {
+    backgroundColor: '#1a1a2e',
+    borderWidth: 1,
+    borderColor: '#16213e',
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 24,
+    alignSelf: 'stretch',
+  },
+  instructionTitle: {
+    color: '#e2e8f0',
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  instructionStep: {
+    color: '#94a3b8',
+    fontSize: 14,
+    lineHeight: 22,
+    marginBottom: 6,
+  },
+  renewalButton: {
+    backgroundColor: '#4ade80',
   },
   primaryButton: {
     backgroundColor: '#4ade80',

@@ -1,8 +1,8 @@
 /**
  * Serial Key Input Screen
- * Allows users to enter serial key for device activation
+ * Get serial number via gateway; enter key, or scan/upload QR to activate
  */
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -14,13 +14,33 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Modal,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { registerSerialKey, getSerialKeyInfo } from '../services/serialKeyService';
+import { approveSubscriptionWithQRCode } from '../services/subscriptionService';
+import { decodeQRFromImageUri, isQRImageDecodeAvailable } from '../utils/decodeQRFromImage';
+import QRScannerScreen from './QRScannerScreen';
 
-export default function SerialKeyScreen({ onSuccess, onCancel }) {
+function isSerialKeyFormat(code) {
+  if (!code || typeof code !== 'string') return false;
+  const parts = code.trim().toUpperCase().split('-');
+  if (parts.length !== 5 || parts[0] !== 'JAG') return false;
+  return parts.slice(1).every((p) => p.length === 4 && /^[A-Z0-9]+$/.test(p));
+}
+
+function isSubscriptionQRFormat(code) {
+  if (!code || typeof code !== 'string') return false;
+  const parts = code.trim().split('-');
+  return parts.length === 3 && parts[0] === 'JAG' && /^\d+$/.test(parts[1]);
+}
+
+export default function SerialKeyScreen({ onSuccess, onCancel, openGetSerialNumberGateway }) {
   const [serialKey, setSerialKey] = useState('');
   const [processing, setProcessing] = useState(false);
   const [info, setInfo] = useState(null);
+  const [showQRScanner, setShowQRScanner] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   React.useEffect(() => {
     loadInfo();
@@ -30,6 +50,80 @@ export default function SerialKeyScreen({ onSuccess, onCancel }) {
     const keyInfo = await getSerialKeyInfo();
     setInfo(keyInfo);
   };
+
+  const handleScannedCode = useCallback(async (code) => {
+    const trimmed = (code || '').trim();
+    if (!trimmed) return { success: false, error: 'Empty code' };
+    try {
+      if (isSerialKeyFormat(trimmed)) {
+        const result = await registerSerialKey(trimmed);
+        if (result.success) {
+          return { success: true, message: 'Serial key registered. App is now activated.' };
+        }
+        return { success: false, error: result.error || 'Invalid serial key' };
+      }
+      if (isSubscriptionQRFormat(trimmed)) {
+        const result = await approveSubscriptionWithQRCode(trimmed);
+        if (result.success) {
+          return { success: true, message: 'Subscription approved. App is now active.' };
+        }
+        return { success: false, error: result.error || 'Invalid subscription QR code' };
+      }
+      return { success: false, error: 'Unrecognized code format. Use a serial key or subscription QR code.' };
+    } catch (e) {
+      return { success: false, error: e?.message || 'Failed to process code' };
+    }
+  }, []);
+
+  const handleQRScanSuccess = useCallback(() => {
+    setShowQRScanner(false);
+    if (onSuccess) onSuccess();
+  }, [onSuccess]);
+
+  const handleUploadQR = useCallback(async () => {
+    if (!isQRImageDecodeAvailable()) {
+      Alert.alert(
+        'Upload not available',
+        'QR decode from image is not available in this build. Please use Scan QR Code instead.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Allow access to photos to pick an image.');
+      return;
+    }
+    setUploading(true);
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 1,
+      });
+      if (result.canceled || !result.assets?.[0]?.uri) {
+        setUploading(false);
+        return;
+      }
+      const uri = result.assets[0].uri;
+      const decoded = await decodeQRFromImageUri(uri);
+      if (!decoded) {
+        Alert.alert('Could not read QR code', 'Use a clear image of the QR code, or use Scan QR Code instead.');
+        setUploading(false);
+        return;
+      }
+      const handleResult = await handleScannedCode(decoded);
+      if (handleResult.success) {
+        Alert.alert('Success', handleResult.message, [{ text: 'OK', onPress: () => onSuccess && onSuccess() }]);
+      } else {
+        Alert.alert('Invalid code', handleResult.error || 'Could not activate.');
+      }
+    } catch (e) {
+      Alert.alert('Error', e?.message || 'Failed to read image.');
+    } finally {
+      setUploading(false);
+    }
+  }, [handleScannedCode, onSuccess]);
 
   const handleSubmit = async () => {
     const trimmedKey = serialKey.trim().toUpperCase();
@@ -106,10 +200,20 @@ export default function SerialKeyScreen({ onSuccess, onCancel }) {
               <Text style={styles.closeButtonText}>✕</Text>
             </TouchableOpacity>
           )}
-          <Text style={styles.title}>Serial Key Required</Text>
+          <Text style={styles.title}>Serial Number Required</Text>
           <Text style={styles.subtitle}>
-            Enter your serial key to activate the app on this device
+            Get your serial number by paying at the gateway. Then enter it below, or scan/upload your QR code to activate.
           </Text>
+
+          {openGetSerialNumberGateway && (
+            <View style={styles.getSerialBox}>
+              <Text style={styles.getSerialTitle}>Get serial number</Text>
+              <Text style={styles.getSerialText}>Pay at the subscription gateway. After payment, return here and scan or upload your QR code.</Text>
+              <TouchableOpacity style={styles.getSerialButton} onPress={openGetSerialNumberGateway}>
+                <Text style={styles.getSerialButtonText}>Get Serial Number</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           {info?.registered && (
             <View style={styles.infoBox}>
@@ -147,21 +251,43 @@ export default function SerialKeyScreen({ onSuccess, onCancel }) {
             {processing ? (
               <ActivityIndicator color="#0f0f1a" />
             ) : (
-              <Text style={styles.buttonText}>Activate App</Text>
+              <Text style={styles.buttonText}>Activate with serial key</Text>
             )}
           </TouchableOpacity>
 
-          <View style={styles.helpBox}>
-            <Text style={styles.helpTitle}>Need a Serial Key?</Text>
-            <Text style={styles.helpText}>
-              Contact the administrator to obtain a serial key for this device.
-            </Text>
-            <Text style={styles.helpText}>
-              Each device requires a unique serial key. If you need to install on another device, you'll need a new serial key.
-            </Text>
-          </View>
+          <Text style={styles.orLabel}>— or activate with QR code —</Text>
+
+          <TouchableOpacity
+            style={[styles.button, styles.buttonSecondary]}
+            onPress={() => setShowQRScanner(true)}
+            disabled={processing}
+          >
+            <Text style={styles.buttonTextSecondary}>📷 Scan QR Code</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.button, styles.buttonSecondary, uploading && styles.buttonDisabled]}
+            onPress={handleUploadQR}
+            disabled={processing || uploading}
+          >
+            {uploading ? (
+              <ActivityIndicator color="#94a3b8" />
+            ) : (
+              <Text style={styles.buttonTextSecondary}>📤 Upload QR Code</Text>
+            )}
+          </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {showQRScanner && (
+        <Modal visible={showQRScanner} animationType="slide" onRequestClose={() => setShowQRScanner(false)}>
+          <QRScannerScreen
+            onScannedCode={handleScannedCode}
+            onScanSuccess={handleQRScanSuccess}
+            onCancel={() => setShowQRScanner(false)}
+          />
+        </Modal>
+      )}
     </KeyboardAvoidingView>
   );
 }
@@ -287,5 +413,53 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
     fontSize: 20,
     fontWeight: '600',
+  },
+  getSerialBox: {
+    backgroundColor: 'rgba(56, 189, 248, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.3)',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 24,
+  },
+  getSerialTitle: {
+    color: '#38bdf8',
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  getSerialText: {
+    color: '#94a3b8',
+    fontSize: 13,
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  getSerialButton: {
+    backgroundColor: '#38bdf8',
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  getSerialButtonText: {
+    color: '#0f0f1a',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  orLabel: {
+    color: '#64748b',
+    fontSize: 13,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  buttonSecondary: {
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: '#475569',
+    marginBottom: 12,
+  },
+  buttonTextSecondary: {
+    color: '#94a3b8',
+    fontSize: 16,
+    fontWeight: '700',
   },
 });
