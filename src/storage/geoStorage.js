@@ -10,11 +10,21 @@ async function ensureDir() {
   }
 }
 
-export async function saveGeoPhoto(uri, metadata) {
+/**
+ * Save a geo-tagged photo. Prefer base64 when provided so the file is written
+ * from the actual capture data (avoids black images from temp file timing on Android).
+ */
+export async function saveGeoPhoto(uri, metadata, base64) {
   await ensureDir();
   const filename = `photo_${Date.now()}.jpg`;
   const destUri = `${GEOTAG_DIR}/${filename}`;
-  await FileSystem.copyAsync({ from: uri, to: destUri });
+
+  if (base64 && typeof base64 === 'string' && base64.length > 0) {
+    await FileSystem.writeAsStringAsync(destUri, base64, { encoding: 'base64' });
+  } else {
+    await FileSystem.copyAsync({ from: uri, to: destUri });
+  }
+
   const entry = { filename, uri: destUri, ...metadata };
   const list = await loadMetadataList();
   list.push(entry);

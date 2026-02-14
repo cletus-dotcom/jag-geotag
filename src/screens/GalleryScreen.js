@@ -9,9 +9,14 @@ import {
   Alert,
   RefreshControl,
   Modal,
+  Pressable,
+  ActivityIndicator,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import * as MediaLibrary from 'expo-media-library';
+import * as Sharing from 'expo-sharing';
 import { loadMetadataList, deleteGeoPhoto } from '../storage/geoStorage';
+import { createKmzFromPhoto } from '../utils/createKmz';
 
 function formatAccuracy(meters) {
   if (meters == null || typeof meters !== 'number') return '—';
@@ -23,6 +28,8 @@ export default function GalleryScreen() {
   const [items, setItems] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [selected, setSelected] = useState(null);
+  const [savingToPhone, setSavingToPhone] = useState(false);
+  const [savingKmz, setSavingKmz] = useState(false);
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
@@ -57,6 +64,51 @@ export default function GalleryScreen() {
     },
     [refresh]
   );
+
+  const saveSelectedToPhone = useCallback(async () => {
+    if (!selected?.uri) return;
+    setSavingToPhone(true);
+    try {
+      const perm = await MediaLibrary.requestPermissionsAsync();
+      if (perm.status !== 'granted') {
+        Alert.alert('Permission required', 'Allow Photos/Gallery permission to save the image to your phone.');
+        return;
+      }
+      await MediaLibrary.saveToLibraryAsync(selected.uri);
+      Alert.alert('Saved', 'Photo saved to your phone Photos/Gallery.');
+    } catch (e) {
+      Alert.alert('Save failed', e?.message || 'Could not save photo to your phone.');
+    } finally {
+      setSavingToPhone(false);
+    }
+  }, [selected]);
+
+  const saveSelectedAsKmz = useCallback(async () => {
+    if (!selected?.uri) return;
+    const lat = selected.latitude;
+    const lon = selected.longitude;
+    if (lat == null || lon == null) {
+      Alert.alert('No coordinates', 'This photo has no location data; cannot create KMZ.');
+      return;
+    }
+    setSavingKmz(true);
+    try {
+      const kmzUri = await createKmzFromPhoto(selected.uri, selected);
+      const canShare = await Sharing.isAvailableAsync();
+      if (canShare) {
+        await Sharing.shareAsync(kmzUri, {
+          mimeType: 'application/vnd.google-earth.kmz',
+          dialogTitle: 'Save as KMZ (open in Google Earth)',
+        });
+      } else {
+        Alert.alert('Saved', 'KMZ file created. Sharing is not available on this device.');
+      }
+    } catch (e) {
+      Alert.alert('KMZ failed', e?.message || 'Could not create KMZ file.');
+    } finally {
+      setSavingKmz(false);
+    }
+  }, [selected]);
 
   const renderItem = ({ item }) => (
     <TouchableOpacity
@@ -112,12 +164,8 @@ export default function GalleryScreen() {
         animationType="fade"
         onRequestClose={() => setSelected(null)}
       >
-        <TouchableOpacity
-          style={styles.modalBackdrop}
-          activeOpacity={1}
-          onPress={() => setSelected(null)}
-        >
-          <View style={styles.modalContent}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setSelected(null)}>
+          <Pressable style={styles.modalContent} onPress={() => {}}>
             <TouchableOpacity
               style={styles.modalClose}
               onPress={() => setSelected(null)}
@@ -138,6 +186,30 @@ export default function GalleryScreen() {
                   <Text style={styles.modalValue}>{formatAccuracy(selected.accuracy)}</Text>
                 </View>
                 <TouchableOpacity
+                  style={[styles.saveButton, savingToPhone && styles.saveButtonDisabled]}
+                  onPress={saveSelectedToPhone}
+                  disabled={savingToPhone}
+                  activeOpacity={0.85}
+                >
+                  {savingToPhone ? (
+                    <ActivityIndicator color="#0f0f1a" />
+                  ) : (
+                    <Text style={styles.saveButtonText}>Save to phone</Text>
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.kmzButton, savingKmz && styles.saveButtonDisabled]}
+                  onPress={saveSelectedAsKmz}
+                  disabled={savingKmz}
+                  activeOpacity={0.85}
+                >
+                  {savingKmz ? (
+                    <ActivityIndicator color="#0f0f1a" />
+                  ) : (
+                    <Text style={styles.kmzButtonText}>Save as KMZ file</Text>
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
                   style={styles.deleteButton}
                   onPress={() => handleDelete(selected)}
                 >
@@ -145,8 +217,8 @@ export default function GalleryScreen() {
                 </TouchableOpacity>
               </>
             )}
-          </View>
-        </TouchableOpacity>
+          </Pressable>
+        </Pressable>
       </Modal>
     </View>
   );
@@ -273,6 +345,33 @@ const styles = StyleSheet.create({
   deleteButtonText: {
     color: '#f87171',
     fontWeight: '600',
+    fontSize: 15,
+  },
+  saveButton: {
+    marginBottom: 12,
+    backgroundColor: '#4ade80',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  saveButtonDisabled: {
+    opacity: 0.7,
+  },
+  saveButtonText: {
+    color: '#0f0f1a',
+    fontWeight: '800',
+    fontSize: 15,
+  },
+  kmzButton: {
+    marginBottom: 12,
+    backgroundColor: '#38bdf8',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  kmzButtonText: {
+    color: '#0f0f1a',
+    fontWeight: '800',
     fontSize: 15,
   },
 });

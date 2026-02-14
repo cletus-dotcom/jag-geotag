@@ -4,7 +4,7 @@
     "slug": "jag-geotag",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./src/jagna_logo.png",
     "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -25,10 +25,11 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./src/jagna_logo.png",
         "backgroundColor": "#1a1a2e"
       },
       "package": "com.jag.geotag",
+      "versionCode": 1,
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.ACCESS_FINE_LOCATION",
@@ -52,7 +53,14 @@
           "locationWhenInUsePermission": "Jag GeoTag uses your location to tag photos with date, time, and exact coordinates (latitude, longitude, accuracy)."
         }
       ],
-      "expo-asset"
+      "expo-asset",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow Jag GeoTag to save photos to your Photos/Gallery."
+        }
+      ],
+      "expo-mail-composer"
     ],
     "extra": {
       "eas": {
